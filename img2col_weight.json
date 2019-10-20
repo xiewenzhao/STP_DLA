@@ -1,0 +1,8 @@
+{signal: [
+  {name: 'clk', wave: 'p.......................'},
+  {name: 'rst_n', wave: '1.0.1....'},
+  {name: 'i2c_start', wave: '0....1.0..'},
+  {name: 'i2c_ready', wave: '0.......1..'},
+  {name: 'state',wave:'=.......==....|..=',data:['IDLE','START','RUN']},
+  {name: 'rd_state',wave:'=.......==.==',data:['SILENT','SET','WAIT','ACK']},
+]}
