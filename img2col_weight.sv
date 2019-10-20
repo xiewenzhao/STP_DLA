@@ -37,10 +37,13 @@ parameter IDLE  =  3'b000,
           RUN   =  3'b010,
           HOLD  =  3'b011;
 
-reg [1:0] rd_state,wr_state;
-parameter SET   = 2'b00,
-          WAIT  = 2'b01,
-          ACK   = 2'b10;
+// BRAM write latency 0, read latency 2.
+reg [2:0] rd_state;
+parameter SILENT =  3'b000,
+          SET    =  3'b001,
+          WAIT0  =  3'b010,
+          WAIT1  =  3'b011,
+          ACK    =  3'b100;
 
 always@(posedge clock) begin    // state状态转换
     if(!rst_n) state <= IDLE;
@@ -70,20 +73,33 @@ end
 
 always@(posedge clock) begin    // state状态行为
     case(state)
-        IDLE:;
+        IDLE: begin
+            rd_state <= SILENT;
+        end;
         START: begin
             i2c_ready <= 1'b1;
             chn_num <= chn_one_time;
             chn_times <= chn_rpt_times;
             chn_num_cnt <= chn_one_time;
             chn_times_cnt <= chn_rpt_times;
-            for(i=0;i<8;i=i+1) begin
-                wgt_rd_en[i] <= 1'b1;
-                wgt_rd_addr[i] <= 'b0;
-            end
+            rd_state <= SET;
         end
         RUN: begin
-            
+            case(rd_state)
+            SET: begin
+                for(i=0;i<8;i=i+1) begin
+                    wgt_rd_en[i] <= 1'b1;
+                    wgt_rd_addr[i] <= 'b0;
+                end
+                rd_state <= WAIT0;
+            end
+            WAIT0: rd_state <= WAIT1;
+            WAIT1: rd_state <= ACK;
+            ACK: begin
+                
+            end
+            default:;
+            endcase
         end
         HOLD: begin
 
