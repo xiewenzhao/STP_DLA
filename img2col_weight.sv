@@ -12,26 +12,25 @@ module img2col_weight
     (
     input                               clock,
     input                               rst_n,
-    input                               i2c_wgt_start,
-    input                               i2c_wgt_continue,
+    input                               i2c_wgt_start,      // 大循环开始信号
+    input                               i2c_wgt_continue,   // 小循环开始信号
 
-    input             [2:0]             chn_one_time,
-    input             [2:0]             chn_rpt_times,
-    input             [3:0]             kernel_size,
-    input             [DATA_WID-1:0]    wgt_in                [SIZE-1:0],
+    input             [2:0]             chn_one_time,       // 一次img2col小循环转换的kernel数
+    input             [2:0]             chn_rpt_times,      // 一次img2col大循环包含的小循环数
+    input             [3:0]             kernel_size,        
+    input             [DATA_WID-1:0]    wgt_in,
     
-    output    reg                       i2c_ready;
-    output    reg                       chn_one_time_done;    
-    output    reg                       chn_rpt_done;
+    output    reg                       i2c_ready;          // img2col单元已准备好，ctrl模块可以暂时撤去控制信号
+    output    reg                       chn_one_time_done;  // 一次小循环完成
+    output    reg                       chn_rpt_done;       // 一次大循环完成
 
-    output    wire    [9:0]             wgt_rd_addr           [SIZE-1:0],   // 9*64
-    output    reg                       wgt_rd_en             [SIZE-1:0],
+    output    wire    [9:0]             wgt_rd_addr,        // 9*64
+    output    reg                       wgt_rd_en,
 
-    output    wire    [6:0]             wgt_wr_addr           [SIZE-1:0],   // 9*8
-    output    reg     [DATA_WID-1:0]    wgt_out               [SIZE-1:0]
+    output    wire    [6:0]             wgt_wr_addr,   // 9*8
+    output    reg     [DATA_WID-1:0]    wgt_out
 );
 
-integer i;
 parameter TRUE  = 1,
           FALSE = 0;
 
@@ -53,28 +52,17 @@ parameter SILENT  =  3'b000,
 reg [2:0] chn_num,chn_times;
 reg [2:0] chn_num_cnt,chn_times_cnt;
 
-reg base_addr_go
+reg base_addr_go;
 reg shift_addr_go;
 reg [6:0] wgt_shift_addr;
 reg [9:0] wgt_rd_base_addr;
-genvar gv_i;
-generate
-    for(gv_i=0;gv_i<8;gv_i=gv_i+1) begin
-        assign wgt_rd_addr[gv_i] = wgt_rd_base_addr + wgt_shift_addr;
-    end
-endgenerate
+assign wgt_rd_addr = wgt_rd_base_addr + wgt_shift_addr;
 
 reg wr_go;
 reg wr_en_delay_reg0,wr_en_delay_reg1,wr_en_delay_reg2;
 reg [6:0] wr_addr_delay_reg0,wr_addr_delay_reg1,wr_addr_delay_reg2;
 reg [DATA_WID-1:0] wr_data_delay_reg0,wr_data_delay_reg1,wr_data_delay_reg2;
 reg [6:0] wgt_wr_addr;
-genvar gv_j;
-generate
-    for(gv_j=0;gv_j<8;gv_j=gv_j+1) begin
-        assign wgt_rd_addr[gv_j] = wgt_rd_base_addr + wgt_shift_addr;
-    end
-endgenerate
 
 always@(posedge clock) begin    // state状态转换
     if(!rst_n) state <= IDLE;
@@ -155,21 +143,21 @@ always@(posedge clock) begin        // Weight read address generation block.
     else begin
         if(base_addr_go) begin
             if(shift_addr_go) begin
-                for(i=0;i<8;i=i+1) wgt_rd_en[i] <= TRUE;
+                wgt_rd_en <= TRUE;
                 wgt_shift_addr <= chn_num_cnt;
                 if(chn_num_cnt != chn_num) chn_num_cnt <= chn_num_cnt + 1;
                 else begin
                     chn_num_cnt <= 'b0;
                     wgt_shift_addr <= 'b0;
                     wgt_rd_base_addr <= wgt_rd_base_addr + wgt_shift_addr;
-                    for(i=0;i<8;i=i+1) wgt_rd_en[i] <= FALSE;
+                    wgt_rd_en <= FALSE;
                     if(chn_times_cnt == chn_times) chn_times_cnt <= 'b0;
                     else chn_times_cnt <= chn_times_cnt + 1;
                 end
                 // TODO: need to be check. what if chn_num is 0(which means there is only 1 ifmap channel)
             end
             else begin
-                for(i=0;i<8;i=i+1) wgt_rd_en[i] <= FALSE;
+                wgt_rd_en <= FALSE;
                 chn_num_cnt <= 'b0;
             end
         end
