@@ -20,7 +20,7 @@ module img2col_weight
     input             [3:0]             kernel_size,        // 可为1,3,5,7,9,11
     input             [DATA_WID-1:0]    wgt_in,             // INT16
     
-    output    reg                       i2c_ready;          // img2col单元已准备好，ctrl模块可以暂时撤去控制信号
+    output    reg                       i2c_ready,          // img2col单元已准备好，ctrl模块可以暂时撤去控制信号
 
     output    wire    [7:0]             wgt_rd_addr,        // maximum:1111_0001,half:1000_0000
     output    reg                       wgt_rd_en,
@@ -31,39 +31,36 @@ module img2col_weight
     output    wire                      chn_sel
 );
 
-parameter TRUE  = 1,
-          FALSE = 0;
+localparam TRUE  = 1,
+           FALSE = 0;
 
-parameter MID_ADDR =  8'b1000_0000;
-parameter RD2WR_DELAY = 2;
+localparam MID_ADDR =  8'b1000_0000;
 
-parameter IDLE     =  3'b001,     // main state
-          START    =  3'b010,
-          WAIT     =  3'b100;
+localparam IDLE     =  3'b001,     // main state
+           START    =  3'b010,
+           WAIT     =  3'b100;
 
 reg [3:0] state;
 reg [3:0] next_state;
 
-reg [3:0] chn_num_store;            // kernel number ready to img2col, maximum is 12(3^3)
-reg [3:0] chn_num_cnt;              // number of kernels that already transfer
+reg [6:0] chn_num_store;            // kernel number ready to img2col, maximum is 12(3^3)
+reg [6:0] chn_num_cnt;              // number of kernels that already transfer
 reg [3:0] ksize;                    // kernel size
 reg [6:0] kernel_cnt;
 
 reg i2c_sel;
-reg [1:0] r2w_cnt;
 reg rd_done;
 reg wr_done;
 assign chn_sel = i2c_sel;
 
 reg img2col_go;
-reg [6:0] wgt_addr;                 // kernel address, maximum is 127.
+reg [7:0] wgt_addr;                 // kernel address, maximum is 127.
 assign wgt_rd_addr = wgt_addr;
 
 reg wr_done_delay0;
 reg wr_en_delay_reg0;
 reg [6:0] wr_addr_delay_reg0;
 reg [DATA_WID-1:0] wr_data_delay_reg0;
-reg [6:0] wgt_wr_addr;
 assign wgt_out = wgt_in;
 
 always@(posedge clock or negedge rst_n) begin    // state状态转换
@@ -72,34 +69,33 @@ always@(posedge clock or negedge rst_n) begin    // state状态转换
 end
 
 always@(*) begin                                 // next_state状态转换
-    if(!rst_n) next_state = IDLE;
-    else begin
-        case(state)
-            IDLE: 
-                if(i2c_wgt_start) next_state = START;
-                else next_state = IDLE;
-            START: 
-                if(i2c_ready == TRUE) next_state = RUN;
-                else next_state = START;
-            WAIT: begin
-                if((rd_done==TRUE)&&(wr_done==TRUE)) next_state = IDLE;
-            end
-            default: next_state = IDLE;
-        endcase
-    end
+    case(state)
+        IDLE: 
+            if(i2c_wgt_start==TRUE) next_state = START;
+            else next_state = IDLE;
+        START: 
+            if(i2c_ready == TRUE) next_state = WAIT;
+            else next_state = START;
+        WAIT: begin
+            if((rd_done==TRUE)&&(wr_done==TRUE)) next_state = IDLE;
+            else next_state = WAIT;
+        end
+        default: next_state = IDLE;
+    endcase
 end
 
 always@(posedge clock or negedge rst_n) begin    // state状态行为
     if(!rst_n) begin
-    // TODO: add rst
+        // TODO: add rst
         i2c_sel <= 0;
-        state <= IDLE;
+        rd_done <= FALSE;
+        i2c_ready <= FALSE;
+        img2col_go <= FALSE;
     end
     else begin
         case(state)
             IDLE: begin
-                r2w_cnt <= 'b0;
-                i2c_ready <=FALSE;
+                i2c_ready <= FALSE;
             end
             START: begin
                 i2c_ready <= TRUE;
@@ -108,7 +104,6 @@ always@(posedge clock or negedge rst_n) begin    // state状态行为
                 chn_num_store <= chn_num;           // store kernel number
                 ksize <= kernel_size;               // store kernel size
                 rd_done <= FALSE;
-                wr_done <= FALSE;
             end
             WAIT: begin
                 if((chn_num_cnt == chn_num_store)&&(kernel_cnt==ksize**2-1)) rd_done <= TRUE;
@@ -128,7 +123,7 @@ always@(posedge clock or negedge rst_n) begin        // This block generates the
     else begin
         if(img2col_go) begin
             wgt_rd_en <= TRUE;
-            if(kernel_cnt != ksize**2-1) kernel_cnt <= kernel_cnt + 1
+            if(kernel_cnt != ksize**2-1) kernel_cnt <= kernel_cnt + 1;
             else begin
                 kernel_cnt <= 'b0;
                 if(chn_num_cnt != chn_num_store) chn_num_cnt <= chn_num_cnt + 1;
@@ -167,7 +162,6 @@ always@(posedge clock or negedge rst_n) begin       // wr address and enable sig
 
         wr_done_delay0 <= rd_done;
         wr_done <= wr_done_delay0;
-        // assign wgt_out = wgt_in;
     end
 end
 
